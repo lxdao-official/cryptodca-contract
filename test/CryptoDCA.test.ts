@@ -65,7 +65,7 @@ describe("CryptoDCA", function () {
   const fee = 5;
 
   const provider1 = new ethers.providers.JsonRpcProvider(
-    process.env.QUOTE_RPC_URL
+    process.env.ALCHEMY_RPC_URL
   );
   const provider = ethers.provider;
 

@@ -11,18 +11,16 @@ const config: HardhatUserConfig = {
   solidity: "0.8.24",
   networks: {
     // virtual_optimistic_ethereum: {
-    //   url: `https://virtual.optimism.rpc.tenderly.co/${process.env.TENDERLY_KEY}`,
-    //   chainId: 10,
-    //   currency: "VETH",
+    //   url: `${process.env.TENDERLY_RPC_URL}`,
+    //   chainId: 1,
+    //   currency: "ETH",
     // },
     hardhat: {
       forking: {
-        // url: `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
-        url: `${process.env.QUOTE_RPC_URL}`,
-        blockNumber: 20703142,
+        url: `${process.env.ALCHEMY_RPC_URL}`,
       },
       mining: {
-        auto: false,
+        auto: true,
         interval: 13000,
       },
     },

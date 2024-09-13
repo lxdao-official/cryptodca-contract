@@ -82,19 +82,19 @@ const prepare = async function prepare(cryptoDCA: CryptoDCA) {
   const total = ethers.utils.parseUnits("10000", 6);
   await USDT.connect(moneyWalletSigner).transfer(recipient, total);
 
-  let amount = ethers.utils.parseUnits("1000", 6);
-  let amountPerTime = ethers.utils.parseUnits("25", 6);
-  await USDT.connect(recipientSigner).approve(cryptoDCA.address, amount);
-  await cryptoDCA
-    .connect(recipientSigner)
-    .createPlan(
-      amount,
-      amountPerTime,
-      USDT_MAINNET.address,
-      WBTC_MAINNET.address,
-      recipient,
-      8
-    );
+  // let amount = ethers.utils.parseUnits("1000", 6);
+  // let amountPerTime = ethers.utils.parseUnits("25", 6);
+  // await USDT.connect(recipientSigner).approve(cryptoDCA.address, amount);
+  // await cryptoDCA
+  //   .connect(recipientSigner)
+  //   .createPlan(
+  //     amount,
+  //     amountPerTime,
+  //     USDT_MAINNET.address,
+  //     WBTC_MAINNET.address,
+  //     recipient,
+  //     8
+  //   );
 };
 
 // We recommend this pattern to be able to use async/await everywhere
