@@ -43,6 +43,7 @@ contract CryptoDCA is
         address recipient,
         uint256 amountIn,
         uint256 amountOut,
+        uint256 balance,
         PlanStatus status
     );
 
@@ -50,6 +51,7 @@ contract CryptoDCA is
         bytes32 pid,
         address from,
         uint256 amount,
+        uint256 balance,
         PlanStatus status
     );
 
@@ -282,7 +284,7 @@ contract CryptoDCA is
             plan.status = PlanStatus.RUNNING;
         }
         // emit event
-        emit FundedPlan(pid, _msgSender(), amount, plan.status);
+        emit FundedPlan(pid, _msgSender(), amount, plan.balance, plan.status);
     }
 
     function executePlan(
@@ -364,6 +366,7 @@ contract CryptoDCA is
                 plan.recipient,
                 plan.amountPerTime,
                 amountOut,
+                plan.balance,
                 plan.status
             );
         } else {
