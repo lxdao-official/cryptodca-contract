@@ -15,6 +15,9 @@ const config: HardhatUserConfig = {
     //   chainId: 1,
     //   currency: "ETH",
     // },
+    dev_server: {
+      url: "https://rpc.cryptodca.xyz/",
+    },
     hardhat: {
       forking: {
         url: `${process.env.ALCHEMY_RPC_URL}`,
