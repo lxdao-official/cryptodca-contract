@@ -316,7 +316,7 @@ contract CryptoDCA is
             require(diff <= executeTolerance, "Out of plan time range.");
         }
 
-        // token1 in contract
+        // token1 balance
         uint256 token1BalanceBefore = IERC20(plan.token1).balanceOf(
             address(this)
         );
@@ -338,6 +338,7 @@ contract CryptoDCA is
             uint256 token1BalanceAfter = IERC20(plan.token1).balanceOf(
                 address(this)
             );
+
             uint256 amountOut = token1BalanceAfter - token1BalanceBefore;
             if (plan.recipient == address(0)) {
                 // remain token1 in contract

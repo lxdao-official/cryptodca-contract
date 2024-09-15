@@ -280,8 +280,7 @@ describe("CryptoDCA", function () {
       );
 
       const options: SwapOptionsSwapRouter02 = {
-        recipient:
-          finalRecipient == zeroAddress() ? cryptoDCA.address : finalRecipient,
+        recipient: cryptoDCA.address,
         slippageTolerance: new Percent(150, 10_000),
         deadline: Math.floor(Date.now() / 1000 + 1800),
         type: SwapType.SWAP_ROUTER_02,
