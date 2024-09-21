@@ -62,8 +62,6 @@ describe("CryptoDCA", function () {
 
   const realWallet = "0x70213959A644BaA94840bbfb4129550bceCEB3c2";
 
-  const fee = 5;
-
   const provider1 = new ethers.providers.JsonRpcProvider(
     process.env.ALCHEMY_RPC_URL
   );
@@ -117,17 +115,29 @@ describe("CryptoDCA", function () {
     // ]);
 
     const cryptoDCA = await CryptoDCA.deploy();
-    await cryptoDCA.initialize({
+
+    const CryptoDCAProxyAdmin = await ethers.getContractFactory(
+      "CryptoDCAProxyAdmin"
+    );
+    const cryptoDCAAdmin = await CryptoDCAProxyAdmin.deploy(admin.address);
+
+    const upgradeableFactory = await ethers.getContractFactory(
+      "CryptoDCAUpgradeableProxy"
+    );
+    const proxy = await upgradeableFactory.deploy(
+      cryptoDCA.address,
+      cryptoDCAAdmin.address,
+      Buffer.from("")
+    );
+    const contract = CryptoDCA.attach(proxy.address);
+    await contract.initialize({
       admin: admin.address,
       executors: [executor1.address, executor2.address, executor3.address],
       uniSwapRouter: SwapRouter02,
-      minimumAmountPerTime: 40,
-      fee: fee,
-      executeTolerance: 60 * 15,
     });
 
     return {
-      cryptoDCA,
+      cryptoDCA: contract,
       realWalletSigner,
       admin,
       executor1,
@@ -258,6 +268,7 @@ describe("CryptoDCA", function () {
           8
         );
 
+      const fee = await cryptoDCA.getFee();
       const _amountIn = parseAmount(amountPerTimeStr, token0);
       const amountIn = _amountIn.multiply(1000 - fee).divide(1000);
       let amountOut = ethers.utils.parseUnits(

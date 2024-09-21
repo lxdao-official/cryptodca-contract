@@ -24,9 +24,6 @@ interface ICryptoDCA {
         address admin;
         address[] executors;
         address uniSwapRouter;
-        uint256 minimumAmountPerTime;
-        uint32 fee;
-        uint32 executeTolerance;
         //        address[] availableToken0List;
         //        address[] availableToken1List;
     }
@@ -50,6 +47,14 @@ interface ICryptoDCA {
     function setExecutors(address[] memory addresses) external;
 
     function revokeExecutors(address[] memory addresses) external;
+
+    function getFee() external view returns (uint32);
+
+    function setFee(uint32 _fee) external;
+
+    function getExecuteTolerance() external view returns (uint32);
+
+    function setExecuteTolerance(uint32 _executeTolerance) external;
 
     function getPID(
         address from,

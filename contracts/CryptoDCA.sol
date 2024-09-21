@@ -1,20 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-
 import "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 
 import "./ICryptoDCA.sol";
 
-// Uncomment this line to use console.log
 import "hardhat/console.sol";
 
 contract CryptoDCA is
@@ -23,6 +18,8 @@ contract CryptoDCA is
     AccessControlUpgradeable
 {
     event UpdatedFee(address operator, uint32 from, uint32 to);
+
+    event UpdatedExecuteTolerance(address operator, uint32 from, uint32 to);
 
     event CreatedPlan(
         bytes32 pid,
@@ -84,7 +81,7 @@ contract CryptoDCA is
 
     mapping(address => mapping(address => uint256)) public userToken1Balance;
 
-    // default is 40u
+    // default is 50u
     uint256 private minimumAmountPerTime;
     // default is 5
     uint32 public fee;
@@ -99,13 +96,11 @@ contract CryptoDCA is
      * @dev Constructors are replaced by initialize function
      */
     function initialize(InitializeParams calldata params) external {
-        console.log("initialize");
+        minimumAmountPerTime = 50;
+        fee = 5;
+        executeTolerance = 15 * 60;
 
         uniSwapRouter = params.uniSwapRouter;
-
-        fee = params.fee;
-        minimumAmountPerTime = params.minimumAmountPerTime;
-        executeTolerance = params.executeTolerance;
 
         _grantRole(ADMIN_ROLE, params.admin);
 
@@ -145,8 +140,24 @@ contract CryptoDCA is
 
     function setFee(uint32 _fee) external onlyRole(ADMIN_ROLE) {
         require(_fee != fee, "Invalid input");
-        emit UpdatedFee(_msgSender(), _fee, fee);
+        emit UpdatedFee(_msgSender(), fee, _fee);
         fee = _fee;
+    }
+
+    function getExecuteTolerance() external view returns (uint32) {
+        return executeTolerance;
+    }
+
+    function setExecuteTolerance(
+        uint32 _executeTolerance
+    ) external onlyRole(ADMIN_ROLE) {
+        require(_executeTolerance != executeTolerance, "Invalid input");
+        emit UpdatedExecuteTolerance(
+            _msgSender(),
+            executeTolerance,
+            _executeTolerance
+        );
+        executeTolerance = _executeTolerance;
     }
 
     function getPID(
@@ -207,8 +218,12 @@ contract CryptoDCA is
         PlanExecuteFrequency frequency
     ) external returns (bytes32) {
         require(
+            amountPerTime >= minimumAmountPerTime,
+            "The amount allocated for each time period should be equal to or greater than the minimum required amount."
+        );
+        require(
             amount >= amountPerTime && amount % amountPerTime == 0,
-            "Invalid amount."
+            "The total amount should be greater than or equal to the amount per time period and should be a multiple of the amount per time period."
         );
         address from = _msgSender();
 
@@ -259,11 +274,14 @@ contract CryptoDCA is
     function fundPlan(bytes32 pid, uint256 amount) external {
         Plan storage plan = plans[pid];
         require(plan.from != address(0), "No plans found.");
-        require(plan.from == _msgSender(), "You have no permission to fund");
+        require(
+            plan.from == _msgSender(),
+            "Only the owner of the plan has the permission to fund it."
+        );
 
         require(
             amount >= plan.amountPerTime && amount % plan.amountPerTime == 0,
-            "Invalid amount."
+            "The added amount should be greater than or equal to the original amount per time period and should be a multiple of the original amount per time period."
         );
 
         // transfer token0
@@ -296,25 +314,29 @@ contract CryptoDCA is
         require(caller == uniSwapRouter, "Caller is wrong.");
 
         Plan storage plan = plans[pid];
-        require(plan.from != address(0), "No plans found.");
+        require(
+            plan.from != address(0),
+            "No matching plan was found for the given input."
+        );
 
-        require(plan.status == PlanStatus.RUNNING, "The plan is not running");
-
-        // fee
-        uint256 _amountIn = (plan.amountPerTime * (uint256(1000) - fee)) / 1000;
-        require(amountIn == _amountIn, "Invalid amountIn");
-
-        // check balance
-        require(plan.balance >= amountIn, "Insufficient token0 balance.");
+        // check status
+        require(plan.status == PlanStatus.RUNNING, "The plan is not running.");
 
         // check time
         if (plan.lastExecuteTimestamp > 0) {
             uint256 duration = block.timestamp - plan.lastExecuteTimestamp;
             uint256 _seconds = _getSeconds(plan.frequency);
-            require(duration >= _seconds, "The time has not yet arrived");
+            require(duration >= _seconds, "The time has not yet arrived.");
             uint256 diff = duration % _seconds;
             require(diff <= executeTolerance, "Out of plan time range.");
         }
+
+        // fee
+        uint256 _amountIn = (plan.amountPerTime * (uint256(1000) - fee)) / 1000;
+        require(amountIn == _amountIn, "Invalid amountIn.");
+
+        // check balance
+        require(plan.balance >= amountIn, "Insufficient token0 balance.");
 
         // token1 balance
         uint256 token1BalanceBefore = IERC20(plan.token1).balanceOf(
@@ -340,6 +362,8 @@ contract CryptoDCA is
             );
 
             uint256 amountOut = token1BalanceAfter - token1BalanceBefore;
+            require(amountOut > 0, "Resisting attacks on off-chain swap data.");
+
             if (plan.recipient == address(0)) {
                 // remain token1 in contract
                 userToken1Balance[plan.from][plan.token1] += amountOut;
@@ -436,8 +460,6 @@ contract CryptoDCA is
             address(this)
         ) - totalPlanToken0Balance[token0];
         require(availableWithdrawBalance > 0, "Insufficient token balance");
-        console.log("withdrawFee");
-        console.log(availableWithdrawBalance);
 
         // transfer
         TransferHelper.safeTransfer(
