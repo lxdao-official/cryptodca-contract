@@ -75,20 +75,22 @@ contract CryptoDCA is
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN");
     bytes32 public constant EXECUTOR_ROLE = keccak256("EXECUTOR");
 
-    mapping(bytes32 => Plan) public plans;
+    mapping(bytes32 => Plan) private plans;
 
-    mapping(address => uint256) public totalPlanToken0Balance;
+    mapping(address => uint256) private totalPlanToken0Balance;
 
     mapping(address => mapping(address => uint256)) public userToken1Balance;
 
     // default is 50u
     uint256 private minimumAmountPerTime;
     // default is 5
-    uint32 public fee;
+    uint32 private fee;
     // default is 15 minutes
     uint32 private executeTolerance;
     // swap router address
     address private uniSwapRouter;
+    // plan token0 available
+    mapping(address => bool) private token0sAvailable;
 
     receive() external payable {}
 
@@ -105,11 +107,11 @@ contract CryptoDCA is
         _grantRole(ADMIN_ROLE, params.admin);
 
         _setExecutors(params.executors);
+
+        address[] memory empty = new address[](0);
+        _setAvailableToken0s(params.availableToken0List, empty);
     }
 
-    /**
-     * @dev Version of the ProjectRegistry contract. Default: "1.0.0"
-     */
     function version() public pure returns (string memory) {
         return "1.0.0";
     }
@@ -134,14 +136,27 @@ contract CryptoDCA is
         }
     }
 
-    function getFee() external view returns (uint32) {
-        return fee;
+    function isToken0Available(address token0) external view returns (bool) {
+        return token0sAvailable[token0];
     }
 
-    function setFee(uint32 _fee) external onlyRole(ADMIN_ROLE) {
-        require(_fee != fee, "Invalid input");
-        emit UpdatedFee(_msgSender(), fee, _fee);
-        fee = _fee;
+    function setAvailableToken0List(
+        address[] memory _addList,
+        address[] memory _removeList
+    ) external onlyRole(ADMIN_ROLE) {
+        _setAvailableToken0s(_addList, _removeList);
+    }
+
+    function _setAvailableToken0s(
+        address[] memory _addList,
+        address[] memory _removeList
+    ) private {
+        for (uint256 i = 0; i < _addList.length; i++) {
+            token0sAvailable[_addList[i]] = true;
+        }
+        for (uint256 i = 0; i < _removeList.length; i++) {
+            token0sAvailable[_addList[i]] = false;
+        }
     }
 
     function getExecuteTolerance() external view returns (uint32) {
@@ -158,6 +173,16 @@ contract CryptoDCA is
             _executeTolerance
         );
         executeTolerance = _executeTolerance;
+    }
+
+    function getFee() external view returns (uint32) {
+        return fee;
+    }
+
+    function setFee(uint32 _fee) external onlyRole(ADMIN_ROLE) {
+        require(_fee != fee, "Invalid input");
+        emit UpdatedFee(_msgSender(), fee, _fee);
+        fee = _fee;
     }
 
     function getPID(
@@ -217,21 +242,24 @@ contract CryptoDCA is
         address recipient,
         PlanExecuteFrequency frequency
     ) external returns (bytes32) {
+        require(token0sAvailable[token0], "The token0 is not supported.");
         require(
-            amountPerTime >= minimumAmountPerTime,
-            "The amount allocated for each time period should be equal to or greater than the minimum required amount."
+            amountPerTime >=
+                minimumAmountPerTime *
+                    (10 ** IERC20Metadata(token0).decimals()),
+            "Invalid amountPerTime param."
         );
         require(
             amount >= amountPerTime && amount % amountPerTime == 0,
-            "The total amount should be greater than or equal to the amount per time period and should be a multiple of the amount per time period."
+            "Invalid amount param."
         );
         address from = _msgSender();
 
         // check token0 approve
-        require(
-            IERC20(token0).allowance(from, address(this)) >= amount,
-            "Approval required"
-        );
+        //        require(
+        //            IERC20(token0).allowance(from, address(this)) >= amount,
+        //            "Approval required"
+        //        );
 
         bytes32 pid = getPID(from, token0, token1, amountPerTime);
 
@@ -273,7 +301,7 @@ contract CryptoDCA is
 
     function fundPlan(bytes32 pid, uint256 amount) external {
         Plan storage plan = plans[pid];
-        require(plan.from != address(0), "No plans found.");
+        //        require(plan.from != address(0), "No plans found.");
         require(
             plan.from == _msgSender(),
             "Only the owner of the plan has the permission to fund it."
@@ -281,7 +309,7 @@ contract CryptoDCA is
 
         require(
             amount >= plan.amountPerTime && amount % plan.amountPerTime == 0,
-            "The added amount should be greater than or equal to the original amount per time period and should be a multiple of the original amount per time period."
+            "Invalid amount param."
         );
 
         // transfer token0
@@ -306,18 +334,15 @@ contract CryptoDCA is
     }
 
     function executePlan(
-        address caller,
         bytes calldata callData,
         bytes32 pid,
         uint256 amountIn
-    ) external nonReentrant onlyRole(EXECUTOR_ROLE) returns (bool) {
-        require(caller == uniSwapRouter, "Caller is wrong.");
-
+    ) external nonReentrant onlyRole(EXECUTOR_ROLE) {
         Plan storage plan = plans[pid];
-        require(
-            plan.from != address(0),
-            "No matching plan was found for the given input."
-        );
+        //        require(
+        //            plan.from != address(0),
+        //            "No matching plan was found for the given input."
+        //        );
 
         // check status
         require(plan.status == PlanStatus.RUNNING, "The plan is not running.");
@@ -331,12 +356,15 @@ contract CryptoDCA is
             require(diff <= executeTolerance, "Out of plan time range.");
         }
 
-        // fee
+        // check fee
         uint256 _amountIn = (plan.amountPerTime * (uint256(1000) - fee)) / 1000;
         require(amountIn == _amountIn, "Invalid amountIn.");
 
         // check balance
-        require(plan.balance >= amountIn, "Insufficient token0 balance.");
+        require(
+            plan.balance >= plan.amountPerTime,
+            "Insufficient token0 balance."
+        );
 
         // token1 balance
         uint256 token1BalanceBefore = IERC20(plan.token1).balanceOf(
@@ -347,66 +375,58 @@ contract CryptoDCA is
         TransferHelper.safeApprove(plan.token0, uniSwapRouter, amountIn);
 
         (bool success, ) = uniSwapRouter.call(callData);
-        if (success) {
-            // timestamp
-            plan.lastExecuteTimestamp = block.timestamp;
 
-            // token0
-            plan.balance -= plan.amountPerTime;
+        require(success, "Call swap failed.");
 
-            // reduce token0 total amount
-            totalPlanToken0Balance[plan.token0] -= plan.amountPerTime;
+        // timestamp
+        plan.lastExecuteTimestamp = block.timestamp;
 
-            uint256 token1BalanceAfter = IERC20(plan.token1).balanceOf(
-                address(this)
-            );
+        // token0
+        plan.balance -= plan.amountPerTime;
 
-            uint256 amountOut = token1BalanceAfter - token1BalanceBefore;
-            require(amountOut > 0, "Resisting attacks on off-chain swap data.");
+        // reduce token0 total amount
+        totalPlanToken0Balance[plan.token0] -= plan.amountPerTime;
 
-            if (plan.recipient == address(0)) {
-                // remain token1 in contract
-                userToken1Balance[plan.from][plan.token1] += amountOut;
-            } else {
-                // transfer token1
-                TransferHelper.safeTransfer(
-                    plan.token1,
-                    plan.recipient,
-                    amountOut
-                );
-            }
+        uint256 token1BalanceAfter = IERC20(plan.token1).balanceOf(
+            address(this)
+        );
 
-            // update status
-            if (plan.balance == 0) {
-                // insufficient token0 and stop it
-                plan.status = PlanStatus.STOPPED;
-            }
+        uint256 amountOut = token1BalanceAfter - token1BalanceBefore;
+        require(amountOut > 0, "Resisting attacks on off-chain swap data.");
 
-            // emit event
-            emit ExecutedPlan(
-                pid,
-                _msgSender(),
-                plan.token0,
-                plan.token1,
-                plan.recipient,
-                plan.amountPerTime,
-                amountOut,
-                plan.balance,
-                plan.status
-            );
+        if (plan.recipient == address(0)) {
+            // remain token1 in contract
+            userToken1Balance[plan.from][plan.token1] += amountOut;
         } else {
-            // cancel approve
-            // TransferHelper.safeApprove(plan.token0, uniSwapRouter, 0);
-            revert("Call swap failed");
+            // transfer token1
+            TransferHelper.safeTransfer(plan.token1, plan.recipient, amountOut);
         }
-        return success;
+
+        // update status
+        if (plan.balance == 0) {
+            // insufficient token0 and stop it
+            plan.status = PlanStatus.STOPPED;
+        }
+
+        // emit event
+        emit ExecutedPlan(
+            pid,
+            _msgSender(),
+            plan.token0,
+            plan.token1,
+            plan.recipient,
+            plan.amountPerTime,
+            amountOut,
+            plan.balance,
+            plan.status
+        );
     }
 
     function pausePlan(bytes32 pid) external {
         address from = _msgSender();
         Plan storage plan = plans[pid];
 
-        require(plan.from != address(0), "Can not found plan.");
+        //        require(plan.from != address(0), "Can not found plan.");
         require(plan.from == from, "You can not pause this plan.");
         require(plan.status == PlanStatus.RUNNING, "The plan is not running.");
 
@@ -420,8 +440,8 @@ contract CryptoDCA is
         address from = _msgSender();
         Plan storage plan = plans[pid];
 
-        require(plan.from != address(0), "Can not found plan.");
-        require(plan.from == from, "You can not result this plan.");
+        //        require(plan.from != address(0), "Can not found plan.");
+        require(plan.from == from, "You can not resume this plan.");
         require(plan.status == PlanStatus.PAUSING, "The plan is not pausing.");
 
         plan.status = PlanStatus.RUNNING;
@@ -434,16 +454,16 @@ contract CryptoDCA is
         address from = _msgSender();
         Plan storage plan = plans[pid];
 
-        require(plan.from != address(0), "Can not found plan.");
+        //        require(plan.from != address(0), "Can not found plan.");
         require(plan.from == from, "You can not cancel this plan.");
+
+        // reduce token0 total amount
+        totalPlanToken0Balance[plan.token0] -= plan.balance;
 
         // transfer
         if (plan.balance > 0) {
             TransferHelper.safeTransfer(plan.token0, recipient, plan.balance);
         }
-
-        // reduce token0 total amount
-        totalPlanToken0Balance[plan.token0] -= plan.balance;
 
         // delete
         delete plans[pid];

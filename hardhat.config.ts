@@ -8,7 +8,15 @@ require("dotenv").config();
 // tenderly.setup({ automaticVerifications: true });
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.24",
+  solidity: {
+    version: "0.8.24",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
+      },
+    },
+  },
   networks: {
     // virtual_optimistic_ethereum: {
     //   url: `${process.env.TENDERLY_RPC_URL}`,
@@ -22,6 +30,7 @@ const config: HardhatUserConfig = {
       forking: {
         url: `${process.env.ALCHEMY_RPC_URL}`,
       },
+      blockGasLimit: 60_000_000,
       mining: {
         auto: true,
         interval: 13000,

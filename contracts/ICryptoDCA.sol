@@ -24,8 +24,7 @@ interface ICryptoDCA {
         address admin;
         address[] executors;
         address uniSwapRouter;
-        //        address[] availableToken0List;
-        //        address[] availableToken1List;
+        address[] availableToken0List;
     }
 
     struct Plan {
@@ -47,6 +46,13 @@ interface ICryptoDCA {
     function setExecutors(address[] memory addresses) external;
 
     function revokeExecutors(address[] memory addresses) external;
+
+    function isToken0Available(address token0) external view returns (bool);
+
+    function setAvailableToken0List(
+        address[] memory _addList,
+        address[] memory _removeList
+    ) external;
 
     function getFee() external view returns (uint32);
 
@@ -75,11 +81,10 @@ interface ICryptoDCA {
     function fundPlan(bytes32 pid, uint256 amount) external;
 
     function executePlan(
-        address caller,
         bytes calldata callData,
         bytes32 pid,
         uint256 amountIn
-    ) external returns (bool);
+    ) external;
 
     function pausePlan(bytes32 pid) external;
 

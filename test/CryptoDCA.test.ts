@@ -103,17 +103,6 @@ describe("CryptoDCA", function () {
 
     const CryptoDCA = await ethers.getContractFactory("CryptoDCA");
 
-    // const cryptoDCA = await hre.upgrades.deployProxy(CryptoDCA, [
-    //   {
-    //     admin: admin.address,
-    //     executors: [executor1.address, executor2.address, executor3.address],
-    //     uniSwapRouter: SwapRouter02,
-    //     minimumAmountPerTime: 40,
-    //     fee: 5,
-    //     executeTolerance: 60 * 15,
-    //   },
-    // ]);
-
     const cryptoDCA = await CryptoDCA.deploy();
 
     const CryptoDCAProxyAdmin = await ethers.getContractFactory(
@@ -134,6 +123,7 @@ describe("CryptoDCA", function () {
       admin: admin.address,
       executors: [executor1.address, executor2.address, executor3.address],
       uniSwapRouter: SwapRouter02,
+      availableToken0List: [USDT_MAINNET.address, USDC_MAINNET.address],
     });
 
     return {
@@ -171,7 +161,7 @@ describe("CryptoDCA", function () {
   });
 
   describe("Plan", async function () {
-    it("Create, Cancel, Fund", async function () {
+    it("Create, Fund, Pause, Resume, Cancel", async function () {
       //*
       const { cryptoDCA, realWalletSigner, recipient } = await loadFixture(
         deployFixture
@@ -180,7 +170,7 @@ describe("CryptoDCA", function () {
       const token0 = USDT_MAINNET;
       const token1 = WETH_MAINNET;
       let amount = ethers.utils.parseUnits("100", token0.decimals);
-      let amountPerTime = ethers.utils.parseUnits("2.5", token0.decimals);
+      let amountPerTime = ethers.utils.parseUnits("50", token0.decimals);
 
       const pid = await cryptoDCA.getPID(
         realWalletSigner.address,
@@ -314,12 +304,7 @@ describe("CryptoDCA", function () {
       if (route != null) {
         await cryptoDCA
           .connect(executor1)
-          .executePlan(
-            SwapRouter02,
-            route.methodParameters?.calldata,
-            pid,
-            amountOut
-          );
+          .executePlan(route.methodParameters?.calldata, pid, amountOut);
         amountFeeAmount = amountFeeAmount.add(amountFee);
 
         {
@@ -331,12 +316,7 @@ describe("CryptoDCA", function () {
 
         await cryptoDCA
           .connect(executor2)
-          .executePlan(
-            SwapRouter02,
-            route.methodParameters?.calldata,
-            pid,
-            amountOut
-          );
+          .executePlan(route.methodParameters?.calldata, pid, amountOut);
         amountFeeAmount = amountFeeAmount.add(amountFee);
 
         {
