@@ -354,9 +354,11 @@ contract CryptoDCA is
             require(duration >= _seconds, "The time has not yet arrived.");
             uint256 diff = duration % _seconds;
             require(diff <= executeTolerance, "Out of plan time range.");
+        } else {
+            // first execute
         }
 
-        // check fee
+        // check calculate amountIn with fee
         uint256 _amountIn = (plan.amountPerTime * (uint256(1000) - fee)) / 1000;
         require(amountIn == _amountIn, "Invalid amountIn.");
 

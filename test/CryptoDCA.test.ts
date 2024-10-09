@@ -56,6 +56,11 @@ function parseAmount(value: string, currency: Currency): CurrencyAmount {
   return CurrencyAmount.fromRawAmount(currency, JSBI.BigInt(typedValueParsed));
 }
 
+const DEFAULT_ADMIN_ROLE =
+  "0x0000000000000000000000000000000000000000000000000000000000000000";
+const ADMIN_ROLE = ethers.utils.id("ADMIN");
+const EXECUTOR_ROLE = ethers.utils.id("EXECUTOR");
+
 describe("CryptoDCA", function () {
   const SwapRouter02 = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45";
   let alphaRouter: AlphaRouter;
@@ -76,7 +81,7 @@ describe("CryptoDCA", function () {
   const WBTC = new ethers.Contract(WBTC_MAINNET.address, WBTC_ABI, provider);
 
   async function deployFixture() {
-    const [admin, executor1, executor2, executor3, recipient] =
+    const [_, admin, executor1, executor2, executor3, recipient] =
       await ethers.getSigners();
 
     alphaRouter = new AlphaRouter({
@@ -155,12 +160,72 @@ describe("CryptoDCA", function () {
 
       const usdcBalance = await USDC.balanceOf(realWalletSigner.getAddress());
       console.log("USDC balance:", ethers.utils.formatUnits(usdcBalance, 6));
-
-      expect(await cryptoDCA.version()).to.equal("1.0.0");
     });
   });
 
   describe("Plan", async function () {
+    it("Create, Fee, Role, ExecuteTolerance, AvailableToken0List", async function () {
+      const {
+        cryptoDCA,
+        realWalletSigner,
+        recipient,
+        admin,
+        executor1,
+        executor2,
+        executor3,
+      } = await loadFixture(deployFixture);
+
+      expect(await cryptoDCA.version()).to.equal("1.0.0");
+
+      const token0 = USDT_MAINNET;
+      const token1 = WETH_MAINNET;
+      let amount = ethers.utils.parseUnits("1000", token0.decimals);
+      let amountPerTime = ethers.utils.parseUnits("50", token0.decimals);
+
+      // create
+      await USDT.connect(realWalletSigner).approve(cryptoDCA.address, amount);
+      await cryptoDCA
+        .connect(realWalletSigner)
+        .createPlan(
+          amount,
+          amountPerTime,
+          token0.address,
+          token1.address,
+          recipient.address,
+          8
+        );
+
+      // Fee
+      expect(await cryptoDCA.getFee()).to.equal(5);
+      await cryptoDCA.connect(admin).setFee(10);
+      expect(await cryptoDCA.getFee()).to.equal(10);
+
+      // Role
+      expect(await cryptoDCA.hasRole(ADMIN_ROLE, admin.address)).to.equal(true);
+      expect(
+        await cryptoDCA.hasRole(EXECUTOR_ROLE, executor1.address)
+      ).to.equal(true);
+      expect(
+        await cryptoDCA.hasRole(EXECUTOR_ROLE, executor2.address)
+      ).to.equal(true);
+      expect(
+        await cryptoDCA.hasRole(EXECUTOR_ROLE, executor3.address)
+      ).to.equal(true);
+
+      // ExecuteTolerance
+      expect(await cryptoDCA.getExecuteTolerance()).to.equal(15 * 60);
+      await cryptoDCA.connect(admin).setExecuteTolerance(20 * 60);
+      expect(await cryptoDCA.getExecuteTolerance()).to.equal(20 * 60);
+
+      // AvailableToken0List
+      expect(await cryptoDCA.isToken0Available(USDT_MAINNET.address)).to.equal(
+        true
+      );
+      expect(await cryptoDCA.isToken0Available(WBTC_MAINNET.address)).to.equal(
+        false
+      );
+    });
+
     it("Create, Fund, Pause, Resume, Cancel", async function () {
       //*
       const { cryptoDCA, realWalletSigner, recipient } = await loadFixture(
@@ -222,7 +287,7 @@ describe("CryptoDCA", function () {
       // */
     });
 
-    it("Execute", async function () {
+    it("Execute, Withdraw", async function () {
       //*
       const {
         cryptoDCA,
@@ -238,6 +303,11 @@ describe("CryptoDCA", function () {
 
       const finalRecipient = recipient.address;
       // const finalRecipient = zeroAddress();
+
+      let recipientToken1Balance: BigNumber = BigNumber.from(0);
+      if (finalRecipient != zeroAddress()) {
+        recipientToken1Balance = await WBTC.balanceOf(finalRecipient);
+      }
 
       const amountPerTimeStr = "50";
       let amount = ethers.utils.parseUnits("100", token0.decimals);
@@ -302,6 +372,7 @@ describe("CryptoDCA", function () {
       );
 
       if (route != null) {
+        // execute
         await cryptoDCA
           .connect(executor1)
           .executePlan(route.methodParameters?.calldata, pid, amountOut);
@@ -314,6 +385,7 @@ describe("CryptoDCA", function () {
 
         await time.increase(15 * 60);
 
+        // execute
         await cryptoDCA
           .connect(executor2)
           .executePlan(route.methodParameters?.calldata, pid, amountOut);
@@ -337,7 +409,7 @@ describe("CryptoDCA", function () {
           expect(plan.status).to.equal(0);
         }
 
-        // withdraw
+        // withdraw or no
         if (finalRecipient == zeroAddress()) {
           const balance1: BigNumber = await WBTC.balanceOf(cryptoDCA.address);
           const balance2: BigNumber = await WBTC.balanceOf(
@@ -350,6 +422,9 @@ describe("CryptoDCA", function () {
             realWalletSigner.address
           );
           expect(balance1.add(balance2)).to.equal(balance3);
+        } else {
+          const balance: BigNumber = await WBTC.balanceOf(finalRecipient);
+          expect(balance).to.greaterThan(recipientToken1Balance);
         }
 
         // withdraw fee
