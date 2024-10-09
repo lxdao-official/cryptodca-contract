@@ -79,7 +79,7 @@ contract CryptoDCA is
 
     mapping(address => uint256) private totalPlanToken0Balance;
 
-    mapping(address => mapping(address => uint256)) public userToken1Balance;
+    mapping(address => mapping(address => uint256)) private userToken1Balance;
 
     // default is 50u
     uint256 private minimumAmountPerTime;
@@ -499,35 +499,28 @@ contract CryptoDCA is
         );
     }
 
+    function getWithdrawBalance(
+        address from,
+        address token1
+    ) external view returns (uint256) {
+        return userToken1Balance[from][token1];
+    }
+
     function withdraw(
         address token1,
         address recipient
     ) external returns (uint256) {
-        uint256 availableWithdrawBalance = userToken1Balance[_msgSender()][
-            token1
-        ];
-        require(availableWithdrawBalance > 0, "Insufficient token balance");
+        uint256 balance = userToken1Balance[_msgSender()][token1];
+        require(balance > 0, "Insufficient token balance");
 
-        uint256 token1TotalBalance = IERC20(token1).balanceOf(address(this));
-        require(
-            token1TotalBalance >= availableWithdrawBalance,
-            "Wrong token data."
-        );
+        // reset
+        userToken1Balance[_msgSender()][token1] = 0;
 
         // transfer
-        TransferHelper.safeTransfer(
-            token1,
-            recipient,
-            availableWithdrawBalance
-        );
+        TransferHelper.safeTransfer(token1, recipient, balance);
 
         // emit event
-        emit Withdrawal(
-            _msgSender(),
-            token1,
-            recipient,
-            availableWithdrawBalance
-        );
-        return availableWithdrawBalance;
+        emit Withdrawal(_msgSender(), token1, recipient, balance);
+        return balance;
     }
 }

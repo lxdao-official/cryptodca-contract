@@ -301,8 +301,8 @@ describe("CryptoDCA", function () {
       const token0 = USDT_MAINNET;
       const token1 = WBTC_MAINNET;
 
-      const finalRecipient = recipient.address;
-      // const finalRecipient = zeroAddress();
+      // const finalRecipient = recipient.address;
+      const finalRecipient = zeroAddress();
 
       let recipientToken1Balance: BigNumber = BigNumber.from(0);
       if (finalRecipient != zeroAddress()) {
@@ -412,16 +412,21 @@ describe("CryptoDCA", function () {
         // withdraw or no
         if (finalRecipient == zeroAddress()) {
           const balance1: BigNumber = await WBTC.balanceOf(cryptoDCA.address);
-          const balance2: BigNumber = await WBTC.balanceOf(
-            realWalletSigner.address
+          const balance2: BigNumber = await cryptoDCA.getWithdrawBalance(
+            realWalletSigner.address,
+            token1.address
           );
+          expect(balance1).to.equal(balance2);
+
           await cryptoDCA
             .connect(realWalletSigner)
             .withdraw(token1.address, realWalletSigner.address);
-          const balance3: BigNumber = await WBTC.balanceOf(
-            realWalletSigner.address
-          );
-          expect(balance1.add(balance2)).to.equal(balance3);
+          expect(
+            await cryptoDCA.getWithdrawBalance(
+              realWalletSigner.address,
+              token1.address
+            )
+          ).to.equal(BigNumber.from(0));
         } else {
           const balance: BigNumber = await WBTC.balanceOf(finalRecipient);
           expect(balance).to.greaterThan(recipientToken1Balance);

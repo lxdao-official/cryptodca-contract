@@ -94,6 +94,11 @@ interface ICryptoDCA {
 
     function withdrawFee(address token0, address recipient) external;
 
+    function getWithdrawBalance(
+        address from,
+        address token1
+    ) external returns (uint256);
+
     function withdraw(
         address token1,
         address recipient
