@@ -196,7 +196,7 @@ describe("CryptoDCA", function () {
         );
 
       // Fee
-      expect(await cryptoDCA.getFee()).to.equal(5);
+      expect(await cryptoDCA.getFee()).to.equal(15);
       await cryptoDCA.connect(admin).setFee(10);
       expect(await cryptoDCA.getFee()).to.equal(10);
 
@@ -330,7 +330,7 @@ describe("CryptoDCA", function () {
 
       const fee = await cryptoDCA.getFee();
       const _amountIn = parseAmount(amountPerTimeStr, token0);
-      const amountIn = _amountIn.multiply(1000 - fee).divide(1000);
+      const amountIn = _amountIn.multiply(10000 - fee).divide(10000);
       let amountOut = ethers.utils.parseUnits(
         amountIn.toExact(),
         token0.decimals

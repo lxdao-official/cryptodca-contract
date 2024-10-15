@@ -83,7 +83,7 @@ contract CryptoDCA is
 
     // default is 50u
     uint256 private minimumAmountPerTime;
-    // default is 5
+    // default is 0.15%
     uint32 private fee;
     // default is 15 minutes
     uint32 private executeTolerance;
@@ -97,9 +97,9 @@ contract CryptoDCA is
     /**
      * @dev Constructors are replaced by initialize function
      */
-    function initialize(InitializeParams calldata params) external {
+    function initialize(InitializeParams calldata params) external initializer {
         minimumAmountPerTime = 50;
-        fee = 5;
+        fee = 15;
         executeTolerance = 15 * 60;
 
         uniSwapRouter = params.uniSwapRouter;
@@ -359,7 +359,8 @@ contract CryptoDCA is
         }
 
         // check calculate amountIn with fee
-        uint256 _amountIn = (plan.amountPerTime * (uint256(1000) - fee)) / 1000;
+        uint256 _amountIn = (plan.amountPerTime * (uint256(10000) - fee)) /
+            10000;
         require(amountIn == _amountIn, "Invalid amountIn.");
 
         // check balance
